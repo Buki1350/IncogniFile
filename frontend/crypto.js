@@ -13,7 +13,7 @@ export function from_base64(text) {
   return Uint8Array.from(atob(text), (c) => c.charCodeAt(0));
 }
 
-export function parseKey(text) {
+export function readTextKey(text) {
   const bytes = from_base64(text.trim());
   if (bytes.length !== 32)
     throw new Error("Klucz musi mieć 32 bajty (Base64).");
@@ -24,21 +24,21 @@ export function newKey() {
   return crypto.getRandomValues(new Uint8Array(32));
 }
 
-async function aes(raw, usage) {
+async function prepareKeyForCrypto(raw, usage) {
   return crypto.subtle.importKey("raw", raw, "AES-GCM", false, [usage]);
 }
 
-export async function encrypt(raw, value) {
+export async function encryptData(raw, value) {
   const nonce = crypto.getRandomValues(new Uint8Array(12));
   const ciphertext = await crypto.subtle.encrypt(
     { name: "AES-GCM", iv: nonce, additionalData: aad, tagLength: 128 },
-    await aes(raw, "encrypt"),
+    await prepareKeyForCrypto(raw, "encrypt"),
     encoder.encode(JSON.stringify(value)),
   );
   return { ciphertext: to_base64(ciphertext), nonce: to_base64(nonce) };
 }
 
-export async function decrypt(raw, envelope) {
+export async function decryptData(raw, envelope) {
   if (envelope.ciphertext.length > 1_000_000)
     throw new Error("Za duży szyfrogram.");
   const bytes = await crypto.subtle.decrypt(
@@ -48,7 +48,7 @@ export async function decrypt(raw, envelope) {
       additionalData: aad,
       tagLength: 128,
     },
-    await aes(raw, "decrypt"),
+    await prepareKeyForCrypto(raw, "decrypt"),
     from_base64(envelope.ciphertext),
   );
   const value = JSON.parse(decoder.decode(bytes));
@@ -122,5 +122,5 @@ export async function unlockKey(v, password) {
     await vaultKey(password, from_base64(v.salt), "decrypt"),
     from_base64(v.data),
   );
-  return parseKey(to_base64(raw));
+  return readTextKey(to_base64(raw));
 }

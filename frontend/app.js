@@ -1,11 +1,11 @@
 import {
   MAX_FILE,
   newKey,
-  parseKey,
+  readTextKey,
   to_base64,
   from_base64,
-  encrypt,
-  decrypt,
+  encryptData,
+  decryptData,
   lockKey,
   unlockKey,
 } from "./crypto.js";
@@ -159,7 +159,7 @@ $("import").onchange = guard(async () => {
   if (!f) return;
   try {
     if (f.size > 100) throw new Error("Nieprawidłowy plik klucza.");
-    setKey(parseKey(await f.text()));
+    setKey(readTextKey(await f.text()));
     status("Klucz wczytany lokalnie.");
   } finally {
     $("import").value = "";
@@ -219,7 +219,7 @@ $("secret-form").addEventListener(
             data: to_base64(await file.arrayBuffer()),
           }
         : { v: 1, kind: "note", data: text };
-      const envelope = await encrypt(current, value);
+      const envelope = await encryptData(current, value);
       const result = await api("/secrets", "POST", {
         ...envelope,
         recipient: $("recipient").value || null,
@@ -274,7 +274,7 @@ async function refresh() {
         const envelope = await api(`/secrets/${secret.id}/read`, "POST");
         let value;
         try {
-          value = await decrypt(current, envelope);
+          value = await decryptData(current, envelope);
         } catch {
           throw new Error(
             "Nie można odszyfrować: niewłaściwy klucz, zmienione dane lub nieprawidłowy format." +
