@@ -4,6 +4,7 @@ use std::sync::Arc;
 #[tokio::test]
 async fn unavailable_database_never_grants_access() {
     std::env::set_var("APP_ORIGIN", "http://127.0.0.1:8080");
+    std::env::set_var("REQUIRE_EMAIL_VERIFICATION", "false");
     let pool = incognifile::db::connect("sqlite::memory:").await.unwrap();
     pool.close().await;
     let app = router(Arc::new(AppState::new(pool).unwrap()));

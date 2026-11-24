@@ -48,7 +48,9 @@ async function request(
     redirect: "error",
     signal: AbortSignal.timeout(15000),
   });
-  const value = await r.json().catch(() => null);
+  const text = await r.text();
+  let value;
+  try { value = JSON.parse(text); } catch { value = { message: text }; }
   console.log(`< ${r.status} ${printable(value)}`);
   return { status: r.status, value, headers: r.headers };
 }

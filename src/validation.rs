@@ -32,7 +32,8 @@ pub fn validate_email(email: &str) -> Result<(), &'static str> {
 }
 
 pub fn validate_password_strength(password: &str) -> Result<(), String> {
-    if password.len() < 8 || password.len() > 128 {
+    // Match HTML maxlength and JavaScript length, including Unicode passwords.
+    if !(8..=128).contains(&password.encode_utf16().count()) {
         return Err("Password must be 8-128 characters long".to_string());
     }
 
@@ -44,4 +45,19 @@ pub fn validate_password_strength(password: &str) -> Result<(), String> {
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::validate_password_strength;
+
+    #[test]
+    fn password_length_matches_browser_limits_for_unicode() {
+        assert!(validate_password_strength("a1ąąą").is_err());
+        assert!(validate_password_strength("a1ąąąąąą").is_ok());
+        assert!(validate_password_strength(&format!("a1{}", "ą".repeat(126))).is_ok());
+        assert!(validate_password_strength(&format!("a1{}", "ą".repeat(127))).is_err());
+        assert!(validate_password_strength(&format!("a1{}", "😀".repeat(63))).is_ok());
+        assert!(validate_password_strength(&format!("a1{}", "😀".repeat(64))).is_err());
+    }
 }

@@ -1,52 +1,49 @@
-# Weryfikacja — 23 listopada 2026
+# Weryfikacja — 24 listopada 2026
 
-Aktualna wersja używa SQLite, kont e-mail i opcjonalnej weryfikacji adresu. Testowano na Windows, Rust 1.100.0, Node 24.13.1. To weryfikacja konkretnych mechanizmów, nie formalny audyt całego systemu.
+Sprawdzono lokalny kod po poprawieniu niespójności API. Środowisko: Windows, Rust 1.100.0, Node 24.13.1. To testy konkretnych mechanizmów, nie formalny audyt ani dowód braku wszystkich podatności.
 
 | Kontrola | Wynik |
 |---|---|
-| cargo test --all-targets --locked | 4 testy jednostkowe i 3 integracyjne: PASS |
+| cargo test --all-targets --locked | 4 testy jednostkowe i 4 integracyjne: PASS |
 | cargo fmt --all --check | PASS |
 | cargo clippy --all-targets --locked -- -D warnings | PASS |
-| npm test | 3 testy modułu Web Crypto: PASS |
-| attacks.mjs z włączoną weryfikacją i lokalną pocztą | 11 scenariuszy HTTP: PASS |
-| expiry.mjs z włączoną weryfikacją | Odczyt przed TTL 200; po 62 sekundach 404, lista pusta: PASS |
-| Przeglądarka: rejestracja e-mailem i próba logowania przed potwierdzeniem | Logowanie odrzucone, widoczny komunikat i ponowne wysłanie linku |
-| Przeglądarka: link z poczty lokalnej i potwierdzenie | Adres potwierdzony; potem logowanie poprawne |
-| Przeglądarka: wiadomość i XSS w podglądzie | Odszyfrowano lokalnie, ładunek pozostał tekstem, 0 elementów HTML w podglądzie |
-| Przeglądarka: podział wysłane/odebrane | Własna wiadomość tylko w wysłanych; wiadomość innego konta tylko w odebranych, z e-mailem nadawcy |
-| Przeglądarka: klucz | Wygenerowanie, zapis chronionej kopii, zablokowanie, ponowne wczytanie hasłem i usunięcie kopii: PASS |
-| Przeglądarka: teksty | Nowy nagłówek, numeracja 1/2/3 i stopka bez laboratorium; zrzut interface.jpg |
-| Faktyczna wysyłka SMTP do zewnętrznej skrzynki | Nie wykonano: brak konfiguracji rzeczywistego konta SMTP |
-| Docker / Render | Nie wykonywano w tej iteracji; konfigurację zaktualizowano |
+| cargo build --locked | PASS |
+| npm test | 3 testy rzeczywistego modułu Web Crypto: PASS |
+| Obsługa zdarzeń app.js z uproszczonym DOM | Logowanie, blokada podwójnego wysłania, szyfrowanie i zgodność JSON, eksport/czyszczenie klucza oraz walidacja formularza: PASS; bez renderowania w przeglądarce |
+| docker compose config --quiet | Poprawność lokalnej konfiguracji Compose: PASS; bez budowania i uruchamiania kontenera |
+| attacks.mjs, weryfikacja wyłączona | 11 scenariuszy HTTP: PASS |
+| attacks.mjs, weryfikacja włączona i poczta lokalna | 11 scenariuszy HTTP: PASS |
+| expiry.mjs, weryfikacja włączona | Odczyt przed TTL: 200; po 62 sekundach: 404 i brak rekordu na liście: PASS |
+| Przeglądarka i rzeczywiste wykonanie DOM/XSS | Nie powtarzano w tej iteracji; procedura ręczna w DEMO.md |
+| Zewnętrzne dostarczenie SMTP | Nie testowano; brak konfiguracji prawdziwej skrzynki |
+| Budowanie i uruchamianie kontenera Docker | Nie powtarzano w tej iteracji |
+| Publiczna instancja Render | Panel i logi przekazane przez użytkownika pokazały Live dla wcześniejszego commitu 1f6b382; te lokalne poprawki wymagają osobnego wdrożenia |
 
-## Nowy test weryfikacji adresu
+## Poprawione niespójności
 
-`cargo test --test email_verification --locked` uruchamia rzeczywisty lokalny HTTP, SQLite w pamięci i własną tymczasową skrzynkę plikową. Sprawdza:
+- Backend oczekiwał encoded_text, additional_encryption, expiration_time_sec i single_use, a frontend wysyłał ciphertext, nonce, ttl_seconds i one_time. Wysyłanie zwracało 422. Przywrócono jeden kontrakt zgodny z frontendem i skryptami testowymi.
+- Lista odczytywała kolumnę one_time do pola single_use bez aliasu, więc dla niepustej bazy zwracała 503. Pole odpowiedzi ponownie nazywa się one_time.
+- Komentarz przy rezerwacji limitu rekordów błędnie mówił o ataku czasowym. Transakcja chroni tutaj przed wyścigiem równoległych żądań.
+- Domyślna flaga weryfikacji w dokumentacji i przykładowym środowisku nie zgadzała się z false w kodzie. Opis i przykład są teraz zgodne; włączenie lokalne wymaga true.
+- Walidacja APP_ORIGIN sprawdza pełną strukturę originu zamiast samego prefiksu. Odrzuca ścieżki, poświadczenia, query, fragmenty i niepoprawny port; dopuszcza też lokalny IPv6.
+- Długość hasła konta była liczona w bajtach, inaczej niż w formularzu. Backend liczy teraz jednostki UTF-16 tak jak HTML/JavaScript, również dla polskich znaków i emoji.
+- Formularze nie blokowały ponownych akcji podczas operacji asynchronicznej. Interfejs serializuje akcje i czasowo wyłącza kontrolki; walidacja odbywa się przed ich wyłączeniem. Żądanie API ma limit 90 sekund, aby blokada nie pozostała na czas nieokreślony.
+- Oba skrypty HTTP sprawdzają lokalny adres bez poświadczeń, query i fragmentu, nie podążają za przekierowaniami i pokazują także tekstowe odpowiedzi błędów Axum.
 
-- brak tokenu potwierdzenia w odpowiedzi rejestracji i przechowywanie jego skrótu w bazie;
-- odmowę logowania przed potwierdzeniem i odrzucenie fałszywego tokenu;
-- ponowne wysłanie, unieważnienie wcześniejszego linku i wygaśnięcie tokenu (czas ustawiony bezpośrednio w testowej bazie);
-- dwie równoległe próby potwierdzenia: dokładnie jeden sukces, drugi token już zużyty;
-- poprawne logowanie po potwierdzeniu i odmowę użycia sesji, jeśli wymagany stan potwierdzenia nie jest spełniony;
-- brak możliwości wyłączenia flagi przez pola żądania i brak dostępu HTTP do skrzynki lokalnej;
-- poprawne logowanie niepotwierdzonego konta w trybie z wyłączoną weryfikacją;
-- błąd dostarczenia: 503 i brak aktywacji konta, a następnie 403 przy logowaniu;
-- zatrzymanie startu przy próbie użycia lokalnej skrzynki dla publicznego originu oraz przy niepoprawnej wartości flagi.
+## Testy regresji i bezpieczeństwa
 
-Testy fail_closed i sqlite nadal sprawdzają odmowę dostępu przy zamkniętej puli, klucze obce oraz brak ponownego przydzielania usuniętych identyfikatorów.
+Nowy tests/messages.rs uruchamia prawdziwy lokalny HTTP i SQLite w pamięci. Sprawdza publiczny JSON: zapis, niepustą listę właściciela i odbiorcy, pole one_time i metadane bez szyfrogramu. Sprawdza także odmowę odczytu obcemu kontu, odmowę usunięcia przez odbiorcę, dwa równoległe odczyty jednorazowe z jednym zwycięzcą, wyczyszczenie szyfrogramu, powtarzalny odczyt zwykłej wiadomości, wygaśnięcie oraz odrzucenie nieznanych pól. Test używa koperty poprawnej strukturalnie; rzeczywiste szyfrowanie jest sprawdzane przez testy Node i scenariusze HTTP importujące frontend/crypto.js.
 
-## Scenariusze ataków
+Test email_verification obejmuje oba tryby flagi, brak jawnego tokenu w API, skrót w bazie, odmowę logowania przed potwierdzeniem, resend i unieważnienie starego linku, wygasły i fałszywy token, jednorazowe potwierdzenie przy równoległych żądaniach oraz fail-closed przy błędzie dostarczenia i konfiguracji. Wygaśnięcie tokenu e-mail symuluje zmianą czasu w testowej bazie.
 
-Brak/fałszywa sesja, IDOR, SQLi, błędny klucz i zmieniony szyfrogram, zaszyfrowany plik z nazwą sugerującą ścieżkę, payload XSS i nagłówki, równoległy jednorazowy odczyt, błędne i za duże dane, obcy Origin, unieważnienie sesji po wylogowaniu i brute force ze zmienianymi nagłówkami IP. Z 8 równoległych odczytów jednorazowych nadal wygrywa dokładnie jeden.
+Test fail_closed sprawdza brak dostępu przy zamkniętej puli SQLite i jawnie wyłącza weryfikację, niezależnie od ustawień środowiska testera. Test sqlite sprawdza klucze obce i brak ponownego użycia usuniętego ID. Testy jednostkowe obejmują limiter, równoległe próby, walidację originu oraz długość haseł Unicode.
 
-Pomocniczy moduł local-mail.mjs jest częścią niezależnych skryptów testowych. Odczytuje plik z lokalnego środowiska testera; aplikacja nie ujawnia tokenu przez publiczne API. SMTP nie jest wymagane do tych testów. TEST_MAIL_DIR musi wskazywać ten sam katalog, co MAIL_OUTBOX_DIR serwera.
+Skrypty ataków sprawdzają brak i fałszywą sesję, IDOR, SQLi, błędny klucz i zmieniony szyfrogram, zaszyfrowany plik z nazwą sugerującą ścieżkę, przeniesienie payloadu XSS i nagłówki ochronne, jednorazowy odczyt przy 8 równoległych żądaniach, limity rozmiaru i TTL, obcy Origin, wylogowanie oraz brute force ze zmienianymi nagłówkami IP. Test HTTP nie wykonuje DOM i nie zastępuje ręcznej próby XSS w przeglądarce.
 
-## Zakres i ograniczenia wykonania
+## Zakres wykonania
 
-W przeglądarce wykryto i poprawiono obsługę linku otwieranego w już istniejącej karcie (hashchange). Kontrola po przebudowaniu potwierdziła odczyt linku, wyczyszczenie fragmentu i przejście całego procesu. Pomocnicze przygotowanie odebranej wiadomości wymagało wskazania właściwego katalogu poczty testowej; po poprawieniu ustawienia podział list potwierdzono w DOM.
+Scenariusze HTTP wykonano na dwóch osobnych, tymczasowych instancjach loopback ze świeżą bazą w pamięci, bez dotykania danych lokalnej aplikacji ani hostingu. Procesy testowe zatrzymano po zakończeniu. Logi przebiegu są w ignorowanym katalogu .tools/audit-*.log; lokalna poczta testowa również pozostaje poza repozytorium i kontekstem Docker.
 
-Nie testowano zewnętrznego dostarczenia SMTP, realnego upływu pełnych 30 minut tokenu e-mail, godziny sesji, publicznego DDoS ani wszystkich rozmiarów ekranu. Token e-mail wygaszono przez kontrolowaną zmianę czasu w bazie testowej. Nie utworzono płatnych zasobów ani usług w koncie użytkownika.
+Nie sprawdzano w tej iteracji pełnej godziny sesji, rzeczywistych 30 minut ważności linku e-mail, zewnętrznego SMTP, publicznego DDoS ani interfejsu w prawdziwej przeglądarce. Przed prezentacją wykonaj [scenariusz ręczny](DEMO.md), szczególnie dla XSS, importu/eksportu klucza i lokalnego sejfu. Zrzut [interface.jpg](interface.jpg) pochodzi z wcześniejszej kontroli interfejsu z 23 listopada; nie jest dowodem aktualnych testów.
 
-Kopie znalezionych starych baz zachowano w ignorowanym .tools/backups/ i zweryfikowano ich zgodność SHA-256. Starego schematu z nazwami użytkowników aplikacja nie nadpisuje automatycznie. Dane i poczta testowa oraz toolchain pozostają w .tools/, poza kontekstem Docker i repozytorium. Zrzut interfejsu: [interface.jpg](interface.jpg).
-
-Proces serwera uruchomiony do testów został zatrzymany. Końcowe poprawki komunikatów crypto.js zmieniają wyłącznie nazwy wyświetlane użytkownikowi; algorytmy i format szyfrowania pozostały te same.
+Status /health sprawdza SELECT 1, a nie cały przepływ aplikacji. Niepusta lista i przesłanie wiadomości wymagają osobnych testów — właśnie dlatego dodano test regresji API.

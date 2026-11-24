@@ -1,13 +1,13 @@
 mod auth;
 pub mod config;
 pub mod db;
-mod verification_email;
 pub mod limiter;
-pub mod password;
 mod messages;
+pub mod password;
 pub mod validation;
+mod verification_email;
 use auth::{login, logout, register, resend_verification, verify_email};
-use messages::{save_message, get_avaliable_messages, read_message, remove_message};
+use messages::{get_available_messages, read_message, remove_message, save_message};
 
 use axum::{
     extract::{DefaultBodyLimit, Request, State},
@@ -40,16 +40,7 @@ impl AppState {
         let origin = std::env::var("APP_ORIGIN")
             .or_else(|_| std::env::var("RENDER_EXTERNAL_URL"))
             .unwrap_or_else(|_| "http://localhost:8080".into());
-        if !(origin.starts_with("https://")
-            || origin.starts_with("http://localhost:")
-            || origin.starts_with("http://127.0.0.1:"))
-            || origin.ends_with('/')
-        {
-            return Err(
-                "APP_ORIGIN must be an HTTPS origin (or localhost HTTP), without trailing slash"
-                    .into(),
-            );
-        }
+        validate_origin(&origin)?;
         let require_verification = config::verification_required()?;
         let mailer = if require_verification {
             Some(verification_email::VerificationMailer::from_env(&origin)?)
@@ -72,7 +63,15 @@ fn error(status: StatusCode, message: &str) -> ApiError {
 }
 fn unavailable(e: sqlx::Error) -> ApiError {
     // Do not log query parameters, tokens, keys or ciphertext.
-    tracing::warn!(kind = %e.as_database_error().map(|d| d.code().unwrap_or_default().into_owned()).unwrap_or_else(|| "connection".into()), "database operation failed");
+    let kind = match &e {
+        sqlx::Error::Database(d) => d.code().unwrap_or_default().into_owned(),
+        sqlx::Error::ColumnNotFound(_) => "column_not_found".into(),
+        sqlx::Error::ColumnDecode { .. } | sqlx::Error::Decode(_) => "decode".into(),
+        sqlx::Error::PoolClosed => "pool_closed".into(),
+        sqlx::Error::PoolTimedOut => "pool_timeout".into(),
+        _ => "database_error".into(),
+    };
+    tracing::warn!(%kind, "database operation failed");
     error(StatusCode::SERVICE_UNAVAILABLE, "Database unavailable")
 }
 pub fn router(state: Shared) -> Router {
@@ -128,7 +127,10 @@ pub fn router(state: Shared) -> Router {
             post(resend_verification).layer(DefaultBodyLimit::max(1024)),
         )
         .route("/api/logout", post(logout))
-        .route("/api/secrets", get(get_avaliable_messages).post(save_message))
+        .route(
+            "/api/secrets",
+            get(get_available_messages).post(save_message),
+        )
         .route("/api/secrets/{id}", axum::routing::delete(remove_message))
         .route("/api/secrets/{id}/read", post(read_message))
         .layer(DefaultBodyLimit::max(1_100_000))
@@ -180,4 +182,68 @@ async fn health(State(s): State<Shared>) -> ApiResult {
         .await
         .map_err(unavailable)?;
     Ok(Json(serde_json::json!({"status":"ok"})))
+}
+
+// An origin cannot contain credentials, a path, query or fragment.
+fn validate_origin(origin: &str) -> Result<(), String> {
+    let valid = origin.parse::<axum::http::Uri>().ok().is_some_and(|uri| {
+        let Some(authority) = uri.authority() else {
+            return false;
+        };
+        let Some(scheme) = uri.scheme_str() else {
+            return false;
+        };
+        let secure = scheme == "https";
+        let local =
+            scheme == "http" && matches!(uri.host(), Some("localhost" | "127.0.0.1" | "[::1]"));
+        (secure || local)
+            && !authority.as_str().contains('@')
+            && !authority.host().is_empty()
+            && authority
+                .as_str()
+                .strip_prefix(authority.host())
+                .is_some_and(|suffix| {
+                    suffix.is_empty()
+                        || suffix
+                            .strip_prefix(':')
+                            .is_some_and(|port| port.parse::<u16>().is_ok())
+                })
+            && origin == format!("{scheme}://{authority}")
+    });
+    if valid {
+        Ok(())
+    } else {
+        Err("APP_ORIGIN must be an HTTPS origin (or localhost HTTP), without credentials, path, query, fragment or trailing slash".into())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::validate_origin;
+
+    #[test]
+    fn origin_must_be_a_complete_origin_not_a_url_or_prefix() {
+        for origin in [
+            "https://example.com",
+            "http://localhost:8080",
+            "http://127.0.0.1:8080",
+            "http://[::1]:8080",
+        ] {
+            assert!(validate_origin(origin).is_ok(), "{origin}");
+        }
+        for origin in [
+            "https://",
+            "https://example.com/",
+            "https://example.com/path",
+            "https://example.com?x=1",
+            "https://example.com#x",
+            "https://user:pass@example.com",
+            "http://localhost:8080@evil.example",
+            "http://example.com",
+            "https://example.com:99999",
+            "https://example.com:abc",
+        ] {
+            assert!(validate_origin(origin).is_err(), "{origin}");
+        }
+    }
 }

@@ -8,6 +8,7 @@ security-tests
 tests
 docs
 *.log
+*.key
 
 *.db
 *.db-*

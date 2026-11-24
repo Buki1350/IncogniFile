@@ -1,6 +1,6 @@
 # IncogniFile
 
-Małe laboratorium na przedmiot **Bezpieczeństwo rozwiązań chmurowych**. Notatki, tymczasowe sekrety i pliki do 512 KiB są szyfrowane w przeglądarce przed wysłaniem. Jeden proces aplikacji, baza SQLite w pliku, bez usług płatnych i osobnego serwera bazy.
+Mała aplikacja do przesyłania zaszyfrowanych wiadomości i plików. Notatki, tymczasowe wiadomości i pliki do 512 KiB są szyfrowane w przeglądarce przed wysłaniem. Jeden proces aplikacji, baza SQLite w pliku, bez usług płatnych i osobnego serwera bazy.
 
 ## Uruchomienie
 
@@ -20,7 +20,7 @@ docker compose up --build
 
 Compose uruchamia **wyłącznie aplikację**. Baza jest w tymczasowym katalogu kontenera i znika po jego zatrzymaniu. Przy uruchomieniu natywnym plik pozostaje na dysku; do resetu zatrzymaj aplikację i usuń jej testowy `incognifile.db`.
 
-Domyślny adres to `http://localhost:8080`. Jeśli otwierasz stronę przez `127.0.0.1` lub wdrażasz ją pod innym adresem, ustaw dokładny `APP_ORIGIN`, bez końcowego ukośnika. Opcjonalne ustawienia:
+Domyślny adres to `http://localhost:8080`. Frontend jest osadzany w programie podczas kompilacji, więc jego zmiany wymagają przebudowania i ponownego uruchomienia serwera. Jeśli otwierasz stronę przez `127.0.0.1` lub wdrażasz ją pod innym adresem, ustaw dokładny `APP_ORIGIN`, bez końcowego ukośnika. Opcjonalne ustawienia:
 
 ```powershell
 $env:APP_ORIGIN = 'http://127.0.0.1:8080'
@@ -33,22 +33,22 @@ Rust nie wczytuje `.env` automatycznie; Compose korzysta z niego opcjonalnie. Zm
 
 ## Weryfikacja e-mail: flaga i lokalne testowanie
 
-Domyślnie potwierdzenie adresu jest wymagane. Flaga w kodzie jest w **src/config.rs**:
+Domyślnie potwierdzenie adresu jest wyłączone, również w konfiguracji Render. Flaga w kodzie jest w **src/config.rs**:
 
 ```rust
-pub const REQUIRE_EMAIL_VERIFICATION: bool = true;
+pub const REQUIRE_EMAIL_VERIFICATION: bool = false;
 ```
 
-Zmień na `false`, aby wyłączyć weryfikację do demonstracji. Po zmianie zatrzymaj i ponownie uruchom aplikację. Alternatywnie bez edycji kodu:
+Zmień na `true`, aby włączyć weryfikację do demonstracji lokalnej. Po zmianie zatrzymaj i ponownie uruchom aplikację. Alternatywnie bez edycji kodu:
 
 ```powershell
-$env:REQUIRE_EMAIL_VERIFICATION = 'false'
+$env:REQUIRE_EMAIL_VERIFICATION = 'true'
 cargo run --locked
 ```
 
 Zmienna środowiskowa ma pierwszeństwo przed stałą. Ustaw `true` lub `false`; brak albo pusta wartość oznacza domyślną stałą z kodu. To ustawienie backendu; użytkownik nie może wyłączyć go parametrem żądania. Konto utworzone przy wyłączonej fladze pozostaje niepotwierdzone i po ponownym włączeniu weryfikacji musi potwierdzić adres.
 
-**Lokalnie nie trzeba podłączać poczty.** Przy domyślnym `MAIL_DELIVERY=local` po rejestracji aplikacja zapisuje wiadomość w pliku `.mail/ID_KONTA.eml`. Otwórz ten plik jako tekst w edytorze, skopiuj link do przeglądarki i naciśnij „Potwierdź adres e-mail”. Następnie zaloguj się. Pliki nie są udostępniane przez HTTP. Ten tryb jest symulacją dostarczenia poczty, nie dowodem posiadania prawdziwej skrzynki; wolno go używać tylko z originem localhost.
+**Lokalnie nie trzeba podłączać poczty.** Po włączeniu weryfikacji, przy domyślnym `MAIL_DELIVERY=local`, po rejestracji aplikacja zapisuje wiadomość w pliku `.mail/ID_KONTA.eml`. Otwórz ten plik jako tekst w edytorze, skopiuj link do przeglądarki i naciśnij „Potwierdź adres e-mail”. Następnie zaloguj się. Pliki nie są udostępniane przez HTTP. Ten tryb jest symulacją dostarczenia poczty, nie dowodem posiadania prawdziwej skrzynki; wolno go używać tylko z originem localhost.
 
 W Dockerze poczta lokalna jest w `/app/data/.mail` wewnątrz kontenera. Do testów HTTP z hosta najprościej wyłączyć weryfikację przez zmienną środowiskową przed `docker compose up`. Przy natywnym uruchomieniu skrypty ataków automatycznie odczytują lokalne pliki weryfikacyjne; jeśli ustawisz inny MAIL_OUTBOX_DIR, podaj tę samą ścieżkę skryptom przez TEST_MAIL_DIR.
 
@@ -65,7 +65,7 @@ Adres e-mail zastępuje nazwę użytkownika także przy wskazywaniu odbiorcy. Ob
 - AES-256-GCM przez Web Crypto; treść, rodzaj i nazwa pliku wewnątrz szyfrogramu.
 - Ważność od minuty do 7 dni i opcjonalny jednorazowy odczyt.
 - Klucz w pamięci karty; import/eksport pliku `.key`; opcjonalny zaszyfrowany sejf w przeglądarce i przycisk jego usunięcia.
-- Limity logowania, rejestracji, żądań i pojemności demonstracyjnej.
+- Limity prób logowania i rejestracji, rozmiaru żądań oraz pojemności demonstracyjnej.
 
 Klucz przekaż odbiorcy **osobnym, bezpiecznym kanałem**. Sam dostęp do konta nie wystarcza do odszyfrowania. Nie ma ról administratora, znajomych ani zewnętrznego storage. SMTP jest opcjonalne i służy tylko do potwierdzania adresu konta; wiadomości użytkowników nadal są przekazywane wewnątrz aplikacji.
 
@@ -102,6 +102,6 @@ Testy kryptografii importują dokładnie moduł używany przez frontend. Test HT
 - Serwer widzi konta, rozmiary, relację właściciel–odbiorca i TTL. Złośliwy serwer może dostarczyć JS przechwytujący klucz. Nie jest to pełny model zero-knowledge.
 - Brak skanowania zaszyfrowanych plików. Frontend ich nie renderuje ani nie uruchamia, ale pobrany plik może być złośliwy.
 - Jedna instancja. Limiter pamięciowy resetuje się po restarcie: 5 prób/konto i 100 globalnie na 15 minut, także poprawnych. Rejestracja: 20/15 minut. Możliwe czasowe blokowanie kont przez napastnika.
-- Maksymalnie 20 rekordów na właściciela, 200 globalnie. Zużyte rekordy nie zawierają szyfrogramu, ale liczą się do limitu aż do usunięcia lub wygaśnięcia. Wygasłe dane są od razu niedostępne, fizycznie usuwane przy następnym tworzeniu sekretu.
+- Maksymalnie 20 rekordów na właściciela, 200 globalnie. Zużyte rekordy nie zawierają szyfrogramu, ale liczą się do limitu aż do usunięcia lub wygaśnięcia. Wygasłe dane są od razu niedostępne, usuwane z tabeli przy następnym tworzeniu wiadomości.
 
 Szczegóły: [model bezpieczeństwa](SECURITY_REPORT.md), [darmowy hosting](docs/HOSTING.md).

@@ -5,6 +5,10 @@ const base = new URL(process.argv[2] || "http://127.0.0.1:8080");
 if (
   !["127.0.0.1", "localhost", "[::1]"].includes(base.hostname) ||
   base.protocol !== "http:" ||
+  base.username ||
+  base.password ||
+  base.search ||
+  base.hash ||
   base.pathname !== "/"
 )
   throw new Error("Local test instance required");
@@ -30,7 +34,9 @@ async function api(path, method, body) {
     redirect: "error",
     signal: AbortSignal.timeout(15000),
   });
-  const v = await r.json();
+  const text = await r.text();
+  let v;
+  try { v = JSON.parse(text); } catch { v = { message: text }; }
   console.log(
     "<",
     r.status,
@@ -51,7 +57,9 @@ if (registration.v.verification_required)
     ).r.status,
     200,
   );
-token = (await api("/api/login", "POST", { email, password })).v.token;
+const login = await api("/api/login", "POST", { email, password });
+assert.equal(login.r.status, 200);
+token = login.v.token;
 const { v } = await api("/api/secrets", "POST", {
   ...(await encrypt(newKey(), { v: 1, kind: "note", data: "expires" })),
   recipient: null,

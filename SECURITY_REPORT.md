@@ -29,7 +29,7 @@ Podstawa parametrów: [MDN AES-GCM](https://developer.mozilla.org/en-US/docs/Web
 
 | Zagrożenie | Ochrona | Dowód i granica |
 |---|---|---|
-| SQL Injection | Stałe zapytania sqlx i `.bind()`, numeryczny ekstraktor ścieżki | HTTP: payload w nazwie i odbiorcy, nieprawidłowe ID; przegląd wszystkich zapytań. Walidacja jest dodatkowa, parametryzacja pozostaje podstawą. |
+| SQL Injection | Stałe zapytania sqlx i `.bind()`, numeryczny ekstraktor ścieżki | HTTP: payload w adresie e-mail i odbiorcy, nieprawidłowe ID; przegląd wszystkich zapytań. Walidacja jest dodatkowa, parametryzacja pozostaje podstawą. |
 | XSS | `textContent`, brak HTML z danych; brak podglądu plików; ścisła CSP, nosniff | Test przeniesienia payloadu i nagłówków + scenariusz DOM w przeglądarce. Sam test HTTP nie dowodzi niewykonania skryptu. |
 | Brute force | Atomowa rezerwacja przed Argon2, 5 prób/konto, 100 globalnie/15 min; 20 rejestracji/15 min; 2 równoległe operacje Argon2 | Test HTTP zmienia X-Forwarded-For i X-Real-IP, nadal 429. Test równoległego limitera. Limit pamięciowy resetuje restart i nie nadaje się do wielu replik. |
 | IDOR | Właściciel lub przypisany odbiorca w SQL odczytu/listy; usunięcie tylko właściciel | HTTP: trzecie konto nie widzi rekordu, odczyt i DELETE zwracają 404; odbiorca nie może kasować. |
@@ -39,7 +39,7 @@ Podstawa parametrów: [MDN AES-GCM](https://developer.mozilla.org/en-US/docs/Web
 | Wykonanie pliku | Szyfrowana nazwa; po odszyfrowaniu Blob application/octet-stream + a.download; nazwa bez separatorów ścieżki | Pliki nie są publikowane jako URL z HTML ani wykonywane na serwerze. Brak AV jest świadomym ograniczeniem szyfrowania klienta. |
 | CSRF | Brak cookie uwierzytelniającego i innego automatycznie dołączanego poświadczenia; wymagany Bearer; brak CORS; odrzucanie obcego Origin | HTTP: cookie bez Authorization ->401, obcy Origin nawet z tokenem ->403. Osobny token CSRF nie jest potrzebny dla tej architektury; XSS nadal może wykonać żądanie. |
 | Jednorazowy odczyt | Transakcja BEGIN IMMEDIATE: blokada zapisu przed sprawdzeniem uprawnień i TTL, wyczyszczenie szyfrogramu i commit przed wydaniem | HTTP: 8 równoległych żądań ->1 sukces, 7 razy 404; wcześniejszy IDOR i listowanie nie zużywają sekretu. Szyfrogram w DB jest czyszczony. |
-| Wygaśnięcie | Czas SQLite (unixepoch, UTC), sprawdzenie przy każdym odczycie i listowaniu | Osobny test TTL=60 sekund, później 404; usunięcie fizyczne przy następnym tworzeniu. |
+| Wygaśnięcie | Czas SQLite (unixepoch, UTC), sprawdzenie przy każdym odczycie i listowaniu | Osobny test TTL=60 sekund, później 404; usunięcie rekordu przy następnym tworzeniu. |
 | Zużycie zasobów | Limity żądań, połączeń, Argon2 i rekordów; quota w transakcji BEGIN IMMEDIATE | Nie jest to ochrona przed DDoS. Limit globalny pozwala celowo odmówić innym dostępu; przy publicznym hostingu potrzebne limity na brzegu. |
 
 ## Co pozostaje poza zakresem
@@ -56,7 +56,7 @@ Na darmowym hostingu akceptujemy utratę całej bazy po resecie. Lokalny plik ba
 
 ## Konta e-mail i weryfikacja adresu
 
-Weryfikacja jest domyślnie wymagana (stała w src/config.rs, nadpisywana zmienną REQUIRE_EMAIL_VERIFICATION). Wyłączenie jest celowym wariantem demonstracyjnym: wtedy adres jest tylko deklarowanym identyfikatorem i można zarejestrować cudzy adres. Po włączeniu flagi sprawdzamy stan email_verified przy logowaniu i przy każdym uwierzytelnionym żądaniu, również dla sesji utworzonych wcześniej. Nie zapisujemy „zweryfikowany” tylko dlatego, że flaga była wyłączona.
+Weryfikacja jest domyślnie wyłączona (stała false w src/config.rs, nadpisywana zmienną REQUIRE_EMAIL_VERIFICATION). Aby zademonstrować potwierdzanie adresu lokalnie, ustaw true. Wyłączenie jest celowym wariantem demonstracyjnym: wtedy adres jest tylko deklarowanym identyfikatorem i można zarejestrować cudzy adres. Po włączeniu flagi sprawdzamy stan email_verified przy logowaniu i przy każdym uwierzytelnionym żądaniu, również dla sesji utworzonych wcześniej. Nie zapisujemy „zweryfikowany” tylko dlatego, że flaga była wyłączona.
 
 Token: 32 losowe bajty OsRng, SHA-256 w tabeli email_verifications, TTL 30 minut. Potwierdzenie zużywa token i aktualizuje konto w transakcji BEGIN IMMEDIATE. Ponowne wysłanie wymaga hasła, podlega limiterowi logowania i unieważnia poprzedni token. Nie ma auto-logowania po kliknięciu linku. Niepowodzenie SMTP pozostawia konto niepotwierdzone; dostęp jest odmawiany. Nie dodano endpointu zwracającego jawny token ani publicznej skrzynki testowej.
 

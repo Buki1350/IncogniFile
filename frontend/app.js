@@ -56,6 +56,8 @@ async function api(path, method = "GET", body) {
     credentials: "omit",
     cache: "no-store",
     redirect: "error",
+    // Allow a sleeping demo instance to wake, but do not lock the UI indefinitely.
+    signal: AbortSignal.timeout(90_000),
   });
   const value = await r.json().catch(() => ({ message: `HTTP ${r.status}` }));
   if (!r.ok) {
@@ -65,17 +67,27 @@ async function api(path, method = "GET", body) {
   }
   return value;
 }
+let operationPending = false;
 function guard(fn) {
   return async (event) => {
     event?.preventDefault();
-    const button = event?.currentTarget;
-    if (button?.tagName === "BUTTON") button.disabled = true;
+    if (operationPending) return;
+    // Validate before disabling fields: disabled fields skip browser validation.
+    const target = event?.currentTarget;
+    const form = target?.tagName === "FORM" ? target : target?.form;
+    if (form && !form.reportValidity()) return;
+    operationPending = true;
+    // Serialize form submissions and key changes during asynchronous operations.
+    const controls = [...document.querySelectorAll("button, input, textarea, select")]
+      .filter(control => !control.disabled);
+    controls.forEach(control => { control.disabled = true; });
     try {
       await fn(event);
     } catch (e) {
       status(e.message || "Operacja nie powiodła się.", true);
     } finally {
-      if (button?.tagName === "BUTTON") button.disabled = false;
+      controls.forEach(control => { control.disabled = false; });
+      operationPending = false;
     }
   };
 }
@@ -111,7 +123,6 @@ $("auth-form").addEventListener(
   }),
 );
 $("register").onclick = guard(async () => {
-  if (!$("auth-form").reportValidity()) return;
   const result = await api("/register", "POST", credentials());
   $("resend").hidden = !result.verification_required;
   status(result.message);
@@ -154,11 +165,11 @@ $("import").onchange = guard(async () => {
     $("import").value = "";
   }
 });
-$("lock").onclick = () => {
+$("lock").onclick = guard(async () => {
   setKey(null);
   $("vault-password").value = "";
   status("Klucz i podgląd usunięte z pamięci aplikacji.");
-};
+});
 $("remember").onclick = guard(async () => {
   const current = needKey().slice();
   try {
@@ -320,7 +331,6 @@ if (!globalThis.crypto?.subtle) {
 }
 
 $("resend").onclick = guard(async () => {
-  if (!$("auth-form").reportValidity()) return;
   const result = await api("/resend-verification", "POST", credentials());
   status(result.message);
 });

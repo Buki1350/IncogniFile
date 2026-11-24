@@ -7,23 +7,24 @@ use serde::{Deserialize, Serialize};
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct NewMessage {
-    encoded_text: String,
-    additional_encryption: String,
+    ciphertext: String,
+    nonce: String,
     recipient: Option<String>,
-    expiration_time_sec: i64,
-    single_use: bool,
+    ttl_seconds: i64,
+    one_time: bool,
 }
 
 fn validate_encrypted_message(p: &NewMessage) -> Result<(), ApiError> {
-    if !(60..=604800).contains(&p.expiration_time_sec) || p.encoded_text.len() > 1_000_000 {
+    if !(60..=604800).contains(&p.ttl_seconds) || p.ciphertext.len() > 1_000_000 {
         return Err(error(
             StatusCode::BAD_REQUEST,
-            "Expiration time must be 60–604800 seconds; text limit 1000000 bytes",
+            "Expiration time must be 60–604800 seconds; ciphertext limit 1000000 Base64 characters",
         ));
     }
 
-    if STANDARD.decode(&p.additional_encryption).map(|v| v.len()).ok() != Some(12)
-        || !STANDARD.decode(&p.encoded_text).is_ok_and(|v| v.len() >= 16)
+    if p.nonce.len() != 16
+        || STANDARD.decode(&p.nonce).map(|v| v.len()).ok() != Some(12)
+        || !STANDARD.decode(&p.ciphertext).is_ok_and(|v| v.len() >= 16)
     {
         return Err(error(StatusCode::BAD_REQUEST, "Invalid AES-GCM envelope"));
     }
@@ -55,7 +56,7 @@ pub(crate) async fn save_message(
         }
     };
 
-    // lock before checking quota, to avoid timing attacks
+    // Reserve the write lock before checking quotas so concurrent requests cannot exceed them.
     let mut tx = s
         .pool
         .begin_with("BEGIN IMMEDIATE")
@@ -84,10 +85,10 @@ pub(crate) async fn save_message(
     )
     .bind(user)
     .bind(recipient)
-    .bind(p.encoded_text)
-    .bind(p.additional_encryption)
-    .bind(p.expiration_time_sec)
-    .bind(p.single_use)
+    .bind(p.ciphertext)
+    .bind(p.nonce)
+    .bind(p.ttl_seconds)
+    .bind(p.one_time)
     .fetch_one(&mut *tx)
     .await
     .map_err(unavailable)?;
@@ -103,10 +104,10 @@ struct Summary {
     owner_email: String,
     recipient_email: Option<String>,
     expires_at: String,
-    single_use: bool,
+    one_time: bool,
 }
 
-pub(crate) async fn get_avaliable_messages(State(s): State<Shared>, h: HeaderMap) -> ApiResult {
+pub(crate) async fn get_available_messages(State(s): State<Shared>, h: HeaderMap) -> ApiResult {
     let user = authenticate(&s, &h).await?;
     let rows = sqlx::query_as::<_, Summary>(
         "SELECT s.id, s.owner_id, s.recipient_id, owner.email AS owner_email,
@@ -125,7 +126,11 @@ pub(crate) async fn get_avaliable_messages(State(s): State<Shared>, h: HeaderMap
     Ok(Json(serde_json::json!({"secrets":rows})))
 }
 
-pub(crate) async fn read_message(State(s): State<Shared>, h: HeaderMap, Path(id): Path<i64>) -> ApiResult {
+pub(crate) async fn read_message(
+    State(s): State<Shared>,
+    h: HeaderMap,
+    Path(id): Path<i64>,
+) -> ApiResult {
     let user = authenticate(&s, &h).await?;
 
     // lock before reading
