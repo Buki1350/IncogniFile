@@ -61,8 +61,8 @@ impl AppState {
 fn error(status: StatusCode, message: &str) -> ApiError {
     (status, Json(serde_json::json!({"message": message})))
 }
+
 fn unavailable(e: sqlx::Error) -> ApiError {
-    // Do not log query parameters, tokens, keys or ciphertext.
     let kind = match &e {
         sqlx::Error::Database(d) => d.code().unwrap_or_default().into_owned(),
         sqlx::Error::ColumnNotFound(_) => "column_not_found".into(),
@@ -74,6 +74,7 @@ fn unavailable(e: sqlx::Error) -> ApiError {
     tracing::warn!(%kind, "database operation failed");
     error(StatusCode::SERVICE_UNAVAILABLE, "Database unavailable")
 }
+
 pub fn router(state: Shared) -> Router {
     Router::new()
         .route(

@@ -14,3 +14,10 @@
 
 /.mail/
 *.eml
+
+# Local documentation and test tools, temporarily excluded from the repository.
+/docs/
+/security-tests/
+/tests/
+/README.md
+/SECURITY_REPORT.md

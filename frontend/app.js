@@ -2,8 +2,8 @@ import {
   MAX_FILE,
   newKey,
   parseKey,
-  base64,
-  unbase64,
+  to_base64,
+  from_base64,
   encrypt,
   decrypt,
   lockKey,
@@ -151,7 +151,7 @@ $("generate").onclick = guard(async () => {
   status("Nowy klucz gotowy. Zapisz kopię w pliku albo zabezpiecz ją hasłem w przeglądarce.");
 });
 $("export").onclick = guard(async () => {
-  save(base64(needKey()), "incognifile.key");
+  save(to_base64(needKey()), "incognifile.key");
   status("Zapisano jawny klucz do pliku. Przechowuj go osobno od danych.");
 });
 $("import").onchange = guard(async () => {
@@ -216,7 +216,7 @@ $("secret-form").addEventListener(
             v: 1,
             kind: "file",
             name: file.name,
-            data: base64(await file.arrayBuffer()),
+            data: to_base64(await file.arrayBuffer()),
           }
         : { v: 1, kind: "note", data: text };
       const envelope = await encrypt(current, value);
@@ -316,7 +316,7 @@ $("close").onclick = clearPreview;
 $("download").onclick = guard(async () => {
   if (downloaded)
     save(
-      unbase64(downloaded.data),
+      from_base64(downloaded.data),
       downloaded.name.replace(/[\\/\x00-\x1f\x7f]/g, "_"),
     );
 });
@@ -334,7 +334,8 @@ $("resend").onclick = guard(async () => {
   const result = await api("/resend-verification", "POST", credentials());
   status(result.message);
 });
-// The URL fragment stays in the browser and is removed before verification.
+
+// URL fragment stays in the browser and is removed before verification
 let verificationToken = null;
 function readVerificationLink() {
   const value = new URLSearchParams(location.hash.slice(1)).get("verify");

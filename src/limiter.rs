@@ -1,5 +1,3 @@
-//! Account and global budgets reserved before expensive work, under one mutex.
-//! Single instance only: restart clears the fifteen-minute window.
 use std::{
     collections::HashMap,
     sync::Mutex,
