@@ -37,7 +37,9 @@ pub struct AppState {
 
 impl AppState {
     pub fn new(pool: SqlitePool) -> Result<Self, String> {
-        let origin = std::env::var("APP_ORIGIN").unwrap_or_else(|_| "http://localhost:8080".into());
+        let origin = std::env::var("APP_ORIGIN")
+            .or_else(|_| std::env::var("RENDER_EXTERNAL_URL"))
+            .unwrap_or_else(|_| "http://localhost:8080".into());
         if !(origin.starts_with("https://")
             || origin.starts_with("http://localhost:")
             || origin.starts_with("http://127.0.0.1:"))

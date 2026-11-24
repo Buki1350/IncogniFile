@@ -4,8 +4,10 @@ IncogniFile wymaga tylko **jednego darmowego Docker Web Service**. Baza SQLite j
 
 ## Render
 
+W repozytorium jest render.yaml definiujący dokładnie jedną usługę Free we Frankfurcie, bez dodatkowej bazy ani dysku. Możesz użyć opcji New → Blueprint i wybrać to repozytorium. Automatyczne wdrażanie kolejnych commitów jest wyłączone. Alternatywnie utwórz Web Service ręcznie:
+
 1. Utwórz Web Service z tego kodu, wybierz runtime Docker i plan **Free**.
-2. Wykorzystaj główny Dockerfile. Ustaw `APP_ORIGIN=https://twoja-nazwa.onrender.com`, bez końcowego ukośnika. Nie wpisuj adresu zewnętrznej bazy. Na Free ustaw REQUIRE_EMAIL_VERIFICATION=false dla demonstracji bez prawdziwej poczty.
+2. Wykorzystaj główny Dockerfile. Aplikacja automatycznie odczytuje swój adres z RENDER_EXTERNAL_URL. APP_ORIGIN możesz ustawić ręcznie dla własnej domeny; ma pierwszeństwo. Nie wpisuj adresu zewnętrznej bazy. Na Free ustaw REQUIRE_EMAIL_VERIFICATION=false dla demonstracji bez prawdziwej poczty.
 3. Render ustawia `PORT`, aplikacja nasłuchuje na `0.0.0.0`. Dockerfile ustawia `DATABASE_URL=sqlite:/app/data/incognifile.db` i przygotowuje zapisywalny katalog dla użytkownika bez uprawnień root.
 4. Health check: `/health`, sprawdzający także SQLite. Nie konfiguruj trwałego dysku ani dodatkowych usług.
 

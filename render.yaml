@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: incognifile
+    runtime: docker
+    plan: free
+    region: frankfurt
+    branch: main
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /health
+    autoDeployTrigger: 'off'
+    envVars:
+      - key: REQUIRE_EMAIL_VERIFICATION
+        value: 'false'
+      - key: DATABASE_URL
+        value: sqlite:/app/data/incognifile.db
