@@ -1,0 +1,7 @@
+{
+  "name": "incognifile",
+  "private": true,
+  "type": "module",
+  "scripts": { "test": "node --test security-tests/crypto.test.mjs", "demo": "node security-tests/attacks.mjs" },
+  "engines": { "node": ">=22" }
+}

@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="pl">
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title>IncogniFile — prywatna przestrzeń</title>
+        <link rel="stylesheet" href="/styles.css" />
+        <script type="module" src="/app.js"></script>
+    </head>
+    <body>
+        <header>
+            <a class="brand" href="/">◈ <span>IncogniFile</span></a
+            ><span class="badge">Szyfrowanie w przeglądarce</span
+            ><button id="logout" hidden>Wyloguj</button>
+        </header>
+        <main>
+            <section class="intro">
+                <p class="eyebrow">SZYFROWANE DANE. WIĘCEJ PRYWATNOŚCI.</p>
+                <h1>Wysyłaj wiadomości.<br />Wymieniaj pliki.</h1>
+                <p>
+                    Notatki i małe pliki. Szyfrowane przed wysłaniem, dostępne
+                    tylko wskazanym kontom.
+                </p>
+            </section>
+            <p id="status" role="status" aria-live="polite">
+                Sesja i odblokowany klucz pozostają tylko w pamięci tej karty.
+            </p>
+            <section id="verification" class="card narrow" hidden><h2>Potwierdź adres e-mail</h2><p>Potwierdzenie adresu pozwoli Ci zalogować się na konto.</p><button id="verify" class="primary">Potwierdź adres e-mail</button></section>
+            <section id="auth" class="card narrow">
+                <h2>Zacznij od konta</h2>
+                <form id="auth-form">
+                    <label
+                        >E-mail<input id="email" type="email" autocomplete="username" required maxlength="254" /></label
+                    ><label
+                        >Hasło konta<input
+                            id="password"
+                            type="password"
+                            autocomplete="current-password"
+                            required
+                            minlength="8"
+                            maxlength="128"
+                    /></label>
+                    <p class="hint">
+                        E-mail służy do logowania i wskazania odbiorcy. Hasło: 8–128
+                        znaków, minimum litera i cyfra.
+                    </p>
+                    <div class="actions">
+                        <button class="primary" type="submit">
+                            Zaloguj się</button
+                        ><button id="register" type="button">
+                            Utwórz konto
+                        </button><button id="resend" type="button" hidden>Wyślij ponownie link</button>
+                    </div>
+                </form>
+            </section>
+            <div id="workspace" hidden>
+                <section class="card">
+                    <div class="section-head">
+                        <h2>1 / Twój klucz</h2>
+                        <span id="key-state" class="badge">Brak klucza w tej karcie</span>
+                    </div>
+                    <p class="hint">
+                        Zapisz kopię klucza, którym zaszyfrujesz wiadomości. Odbiorcy przekaż go bezpiecznym kanałem. Dany klucz otwiera wszystkie zaszyfrowane nim wiadomości. Utraconego klucza nie da się odzyskać.
+                    </p>
+                    <div class="actions">
+                        <button id="generate">Nowy klucz</button
+                        ><button id="export">Zapisz klucz do pliku</button
+                        ><label class="file-label"
+                            >Wczytaj klucz<input
+                                id="import"
+                                type="file"
+                                accept=".key,text/plain" /></label
+                        ><button id="lock">Wyczyść klucz</button>
+                    </div>
+                    <p class="hint">Wyczyszczenie  klucza usuwa go z tej karty i czyści podgląd. Nie usuwa zapisanej kopii ani pobranego pliku klucza.</p>
+                    <p class="hint">Nie chcesz za każdym razem wczytywać pliku? Zapisz klucz w przeglądarce, chroniąc go osobnym hasłem. Później wpiszesz to hasło, aby ponownie go wczytać.</p>
+                    <div class="vault">
+                        <label
+                            >Hasło chroniące zapisany klucz<input
+                                id="vault-password"
+                                type="password"
+                                autocomplete="off"
+                                minlength="12"
+                                maxlength="128"
+                                placeholder="Minimum 12 znaków"
+                        /></label>
+                        <div class="actions">
+                            <button id="remember">
+                                Zapisz klucz w przeglądarce</button
+                            ><button id="unlock">Wczytaj zapisany klucz</button
+                            ><button id="forget" class="danger">
+                                Usuń klucz z przeglądarki
+                            </button>
+                        </div>
+                    </div>
+                    <p class="hint">
+                        Wpisz inne hasło niż do konta. Zapisana kopia jest dostępna tylko w tym profilu przeglądarki i pod tym adresem strony. Usunięcie kasuje tę kopię i aktywny klucz, ale nie pobrane pliki.
+                    </p>
+                </section>
+                <div class="columns">
+                    <section class="card">
+                        <h2>2 / Nowa wiadomość</h2>
+                        <form id="secret-form">
+                            <label
+                                >Wiadomość<textarea
+                                    id="content"
+                                    rows="5"
+                                    maxlength="10000"
+                                    placeholder="Treść zostanie zaszyfrowana lokalnie…"
+                                ></textarea></label
+                            ><label
+                                >Lub plik do 512 KiB<input
+                                    id="upload"
+                                    type="file"
+                            /></label>
+                            <p class="hint">
+                                Wybierz wiadomość albo plik. Nazwa pliku też
+                                jest szyfrowana.
+                            </p>
+                            <label
+                                >E-mail odbiorcy<input id="recipient" type="email" maxlength="254" autocomplete="off" placeholder="anna@example.com, puste = tylko Ty" /></label
+                            ><label
+                                >Ważność<select id="ttl">
+                                    <option value="3600">1 godzina</option>
+                                    <option value="86400" selected>
+                                        24 godziny
+                                    </option>
+                                    <option value="604800">7 dni</option>
+                                    <option value="60">
+                                        1 minuta
+                                    </option>
+                                </select></label
+                            ><label class="check"
+                                ><input
+                                    id="one-time"
+                                    type="checkbox"
+                                />Jednorazowy odczyt</label
+                            >
+                            <p class="hint">
+                                Pierwszy odczyt przez Ciebie lub odbiorcę usuwa wiadomość, także przy złym kluczu lub zerwanym połączeniu.
+                            </p>
+                            <button class="primary" type="submit">
+                                Zaszyfruj i wyślij
+                            </button>
+                        </form>
+                    </section>
+                    <section class="card">
+                        <div class="section-head">
+                            <h2>3 / Wiadomości</h2>
+                            <button id="refresh">Odśwież</button>
+                        </div>
+                        <p class="hint">
+                            Lista nie pobiera treści i nie zużywa wiadomości.
+                            Tylko właściciel może usuwać.
+                        </p>
+                        <h3 class="message-heading">Wysłane wiadomości</h3><div id="sent"></div>
+                        <h3 class="message-heading">Odebrane wiadomości</h3><div id="received"></div>
+                    </section>
+                </div>
+                <section id="opened" class="card" hidden>
+                    <div class="section-head">
+                        <h2>Odszyfrowana treść</h2>
+                        <button id="close">Wyczyść podgląd</button>
+                    </div>
+                    <pre id="preview"></pre>
+                    <button id="download" hidden>
+                        Pobierz odszyfrowany plik
+                    </button>
+                    <p class="hint">
+                        Pobrany plik może być niebezpieczny. Aplikacja go nie
+                        uruchamia ani nie skanuje.
+                    </p>
+                </section>
+            </div>
+            <footer>
+                IncogniFile
+            </footer>
+        </main>
+    </body>
+</html>

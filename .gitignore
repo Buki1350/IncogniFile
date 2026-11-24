@@ -1,0 +1,16 @@
+/target/
+/.tools/
+/node_modules/
+.env
+.env.*
+!.env.example
+*.log
+*.tmp
+*.key
+.DS_Store
+
+*.db
+*.db-*
+
+/.mail/
+*.eml

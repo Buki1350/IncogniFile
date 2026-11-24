@@ -1,0 +1,16 @@
+target
+.tools
+.git
+.env
+.env.*
+node_modules
+security-tests
+tests
+docs
+*.log
+
+*.db
+*.db-*
+
+.mail
+*.eml
